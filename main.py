@@ -66,20 +66,37 @@ async def get_top_news():
         
     return news_report
 
-async def main():
-    market_text, chart_img = await get_market_data_and_plots()
-    news_text = await get_top_news()
+async def get_top_news():
+    # 더 안정적인 구글 뉴스 RSS 주소 (한국 경제 뉴스)
+    rss_url = "https://news.google.com/rss/headlines/section/topic/BUSINESS?hl=ko&gl=KR&ceid=KR:ko"
     
-    final_text = market_text + news_text
-    bot = Bot(token=TELEGRAM_TOKEN)
-    
-    # 사진과 함께 텍스트 전송 (텍스트가 너무 길면 잘릴 수 있어 나눠 보낼 수도 있음)
     try:
-        await bot.send_photo(chat_id=CHAT_ID, photo=chart_img, caption=final_text)
-    except:
-        # 캡션 제한(1024자) 초과 시 사진과 텍스트 분할 전송
-        await bot.send_photo(chat_id=CHAT_ID, photo=chart_img)
-        await bot.send_message(chat_id=CHAT_ID, text=final_text)
+        # 뉴스 데이터를 가져옵니다.
+        feed = feedparser.parse(rss_url)
+        
+        # 피드 자체가 비어있는지 확인
+        if not feed.entries:
+            # 예비 주소로 한 번 더 시도 (구글 뉴스 전체 경제 토픽)
+            alt_url = "https://news.google.com/news/rss/headlines/section/topic/ECONOMY?hl=ko&gl=KR"
+            feed = feedparser.parse(alt_url)
+
+        news_report = "\n📰 [오늘의 주요 뉴스 Top 5]\n"
+        count = 0
+        
+        for entry in feed.entries:
+            if count >= 5: break
+            # 제목 뒤에 붙는 언론사명 제거 (예: 제목 - 연합뉴스 -> 제목)
+            title = entry.title.rsplit(" - ", 1)[0]
+            news_report += f"{count+1}. {title}\n"
+            count += 1
+        
+        if count == 0:
+            return "\n📰 [오늘의 주요 뉴스]\n현재 구글 뉴스 서버에서 데이터를 가져오지 못했습니다. 잠시 후 다시 시도해 주세요.\n"
+            
+        return news_report
+
+    except Exception as e:
+        return f"\n📰 [오늘의 주요 뉴스]\n뉴스 수집 중 오류가 발생했습니다: {str(e)}\n"
 
 if __name__ == "__main__":
     asyncio.run(main())
