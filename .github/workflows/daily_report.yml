@@ -6,15 +6,19 @@ on:
     - cron: '0 23 * * *'
   workflow_dispatch: 
 
+# 전역 환경 변수 설정: Node.js 24 사용을 강제합니다.
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4 # v3 -> v4로 수정
+        uses: actions/checkout@v4
 
       - name: Set up Python
-        uses: actions/setup-python@v5 # v4 -> v5로 수정
+        uses: actions/setup-python@v5
         with:
           python-version: '3.9'
 
