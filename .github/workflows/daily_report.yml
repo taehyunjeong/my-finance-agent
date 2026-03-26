@@ -4,17 +4,17 @@ on:
   schedule:
     # 매일 한국 시간 오전 8시 (UTC 기준 23:00)
     - cron: '0 23 * * *'
-  workflow_dispatch: # 수동으로 실행해볼 수 있는 버튼 생성
+  workflow_dispatch: 
 
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4 # v3 -> v4로 수정
 
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5 # v4 -> v5로 수정
         with:
           python-version: '3.9'
 
