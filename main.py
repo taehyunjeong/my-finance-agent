@@ -19,9 +19,9 @@ async def get_market_data_and_plots():
     
     report = f"📅 {datetime.now().strftime('%Y-%m-%d')} 경제 리포트\n\n"
     
-    # 개별 그래프를 그리기 위한 서브플롯 설정 (지수 개수만큼 세로로 배치)
-    fig, axes = plt.subplots(len(tickers), 1, figsize=(8, 15))
-    plt.subplots_adjust(hspace=0.5) # 그래프 간격 조정
+    # 그래프 설정
+    fig, axes = plt.subplots(len(tickers), 1, figsize=(8, 18))
+    plt.subplots_adjust(hspace=0.6)
     
     for i, (name, ticker) in enumerate(tickers.items()):
         try:
@@ -33,17 +33,14 @@ async def get_market_data_and_plots():
                 emoji = "🔺" if diff_pct > 0 else "🔻"
                 report += f"• {name}: {curr:,.2f} ({emoji}{diff_pct:.2f}%)\n"
                 
-                # 개별 그래프 그리기
                 ax = axes[i]
                 ax.plot(df.index.strftime('%m/%d'), df['Close'], marker='o', color='royalblue', linewidth=2)
                 ax.set_title(f"{name} Trend (5 Days)", fontsize=12, fontweight='bold')
                 ax.grid(True, linestyle='--', alpha=0.7)
-                # Y축 라벨을 읽기 쉽게 천 단위 콤마 추가
                 ax.get_yaxis().set_major_formatter(plt.FuncFormatter(lambda x, p: format(int(x), ',')))
-        except:
+        except Exception as e:
             report += f"• {name}: 데이터 로드 실패\n"
 
-    # 메모리에 전체 그래프 이미지 저장
     buf = io.BytesIO()
     plt.savefig(buf, format='png', bbox_inches='tight')
     buf.seek(0)
@@ -52,51 +49,47 @@ async def get_market_data_and_plots():
     return report, buf
 
 async def get_top_news():
-    rss_url = "https://news.google.com/rss/topics/CAAqIggKIhxDQkFTRHdvSkwyMHZNR2h6Y0hKekp6RVNBZ0FmU2d3R29BQVAB?hl=ko&gl=KR&ceid=KR%3Ako"
-    feed = feedparser.parse(rss_url)
-    
-    news_report = "\n📰 [오늘의 주요 뉴스 Top 5]\n"
-    for i, entry in enumerate(feed.entries[:5]):
-        # 제목에서 언론사명 제거
-        title = entry.title.rsplit(" - ", 1)[0]
-        news_report += f"{i+1}. {title}\n"
-    
-    if not feed.entries:
-        news_report += "현재 수집된 뉴스가 없습니다.\n"
-        
-    return news_report
-
-async def get_top_news():
-    # 더 안정적인 구글 뉴스 RSS 주소 (한국 경제 뉴스)
+    # 1순위: 구글 뉴스 비즈니스 섹션
     rss_url = "https://news.google.com/rss/headlines/section/topic/BUSINESS?hl=ko&gl=KR&ceid=KR:ko"
+    # 2순위(예비): 구글 뉴스 경제 일반
+    backup_url = "https://news.google.com/news/rss/headlines/section/topic/ECONOMY?hl=ko&gl=KR"
     
     try:
-        # 뉴스 데이터를 가져옵니다.
         feed = feedparser.parse(rss_url)
         
-        # 피드 자체가 비어있는지 확인
+        # 만약 1순위 주소에서 뉴스가 안 오면 예비 주소 사용
         if not feed.entries:
-            # 예비 주소로 한 번 더 시도 (구글 뉴스 전체 경제 토픽)
-            alt_url = "https://news.google.com/news/rss/headlines/section/topic/ECONOMY?hl=ko&gl=KR"
-            feed = feedparser.parse(alt_url)
-
+            feed = feedparser.parse(backup_url)
+            
         news_report = "\n📰 [오늘의 주요 뉴스 Top 5]\n"
         count = 0
-        
         for entry in feed.entries:
             if count >= 5: break
-            # 제목 뒤에 붙는 언론사명 제거 (예: 제목 - 연합뉴스 -> 제목)
             title = entry.title.rsplit(" - ", 1)[0]
             news_report += f"{count+1}. {title}\n"
             count += 1
-        
+            
         if count == 0:
-            return "\n📰 [오늘의 주요 뉴스]\n현재 구글 뉴스 서버에서 데이터를 가져오지 못했습니다. 잠시 후 다시 시도해 주세요.\n"
+            news_report += "현재 수집된 실시간 뉴스가 없습니다.\n"
             
         return news_report
+    except Exception:
+        return "\n📰 [오늘의 주요 뉴스]\n뉴스 데이터를 가져오는 중 오류가 발생했습니다.\n"
 
-    except Exception as e:
-        return f"\n📰 [오늘의 주요 뉴스]\n뉴스 수집 중 오류가 발생했습니다: {str(e)}\n"
+async def main():
+    market_text, chart_img = await get_market_data_and_plots()
+    news_text = await get_top_news()
+    
+    final_text = market_text + news_text
+    bot = Bot(token=TELEGRAM_TOKEN)
+    
+    try:
+        # 사진과 함께 텍스트 전송
+        await bot.send_photo(chat_id=CHAT_ID, photo=chart_img, caption=final_text)
+    except Exception:
+        # 글자 수 초과 시 분할 전송
+        await bot.send_photo(chat_id=CHAT_ID, photo=chart_img)
+        await bot.send_message(chat_id=CHAT_ID, text=final_text)
 
 if __name__ == "__main__":
     asyncio.run(main())
