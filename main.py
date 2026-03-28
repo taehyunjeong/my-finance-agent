@@ -12,20 +12,23 @@ TELEGRAM_TOKEN = os.environ['TELEGRAM_TOKEN']
 CHAT_ID = os.environ['CHAT_ID']
 
 async def get_market_data_and_plots():
+    # WTI 유가(CL=F) 추가
     tickers = {
         "S&P 500": "^GSPC", "Nasdaq": "^IXIC", 
-        "USD/KRW": "KRW=X", "Gold": "GC=F", "BTC": "BTC-USD"
+        "USD/KRW": "KRW=X", "WTI Oil": "CL=F", 
+        "Gold": "GC=F", "BTC": "BTC-USD"
     }
     
-    report = f"📅 {datetime.now().strftime('%Y-%m-%d')} 경제 리포트\n\n"
+    report = f"📅 {datetime.now().strftime('%Y-%m-%d')} 경제 리포트 (30일 추세)\n\n"
     
-    # 그래프 설정
-    fig, axes = plt.subplots(len(tickers), 1, figsize=(8, 18))
+    # 지수가 6개로 늘어남에 따라 figsize 조정 (세로 길이 증가)
+    fig, axes = plt.subplots(len(tickers), 1, figsize=(8, 22))
     plt.subplots_adjust(hspace=0.6)
     
     for i, (name, ticker) in enumerate(tickers.items()):
         try:
-            df = yf.Ticker(ticker).history(period="5d")
+            # 기간을 30일(period="1mo")로 변경
+            df = yf.Ticker(ticker).history(period="1mo")
             if not df.empty:
                 curr = df['Close'].iloc[-1]
                 prev = df['Close'].iloc[-2]
@@ -34,11 +37,15 @@ async def get_market_data_and_plots():
                 report += f"• {name}: {curr:,.2f} ({emoji}{diff_pct:.2f}%)\n"
                 
                 ax = axes[i]
-                ax.plot(df.index.strftime('%m/%d'), df['Close'], marker='o', color='royalblue', linewidth=2)
-                ax.set_title(f"{name} Trend (5 Days)", fontsize=12, fontweight='bold')
-                ax.grid(True, linestyle='--', alpha=0.7)
+                # 30일 데이터이므로 마커('o') 크기를 줄이거나 제거하여 선 위주로 표현
+                ax.plot(df.index, df['Close'], color='royalblue', linewidth=2)
+                ax.set_title(f"{name} Trend (30 Days)", fontsize=12, fontweight='bold')
+                ax.grid(True, linestyle='--', alpha=0.5)
+                
+                # 날짜 간격 최적화 (데이터가 많으므로 일부만 표시)
+                plt.setp(ax.get_xticklabels(), rotation=0, fontsize=9)
                 ax.get_yaxis().set_major_formatter(plt.FuncFormatter(lambda x, p: format(int(x), ',')))
-        except Exception as e:
+        except Exception:
             report += f"• {name}: 데이터 로드 실패\n"
 
     buf = io.BytesIO()
@@ -49,15 +56,11 @@ async def get_market_data_and_plots():
     return report, buf
 
 async def get_top_news():
-    # 1순위: 구글 뉴스 비즈니스 섹션
     rss_url = "https://news.google.com/rss/headlines/section/topic/BUSINESS?hl=ko&gl=KR&ceid=KR:ko"
-    # 2순위(예비): 구글 뉴스 경제 일반
     backup_url = "https://news.google.com/news/rss/headlines/section/topic/ECONOMY?hl=ko&gl=KR"
     
     try:
         feed = feedparser.parse(rss_url)
-        
-        # 만약 1순위 주소에서 뉴스가 안 오면 예비 주소 사용
         if not feed.entries:
             feed = feedparser.parse(backup_url)
             
@@ -69,10 +72,7 @@ async def get_top_news():
             news_report += f"{count+1}. {title}\n"
             count += 1
             
-        if count == 0:
-            news_report += "현재 수집된 실시간 뉴스가 없습니다.\n"
-            
-        return news_report
+        return news_report if count > 0 else "\n📰 [오늘의 주요 뉴스]\n현재 수집된 뉴스가 없습니다.\n"
     except Exception:
         return "\n📰 [오늘의 주요 뉴스]\n뉴스 데이터를 가져오는 중 오류가 발생했습니다.\n"
 
@@ -84,10 +84,8 @@ async def main():
     bot = Bot(token=TELEGRAM_TOKEN)
     
     try:
-        # 사진과 함께 텍스트 전송
         await bot.send_photo(chat_id=CHAT_ID, photo=chart_img, caption=final_text)
     except Exception:
-        # 글자 수 초과 시 분할 전송
         await bot.send_photo(chat_id=CHAT_ID, photo=chart_img)
         await bot.send_message(chat_id=CHAT_ID, text=final_text)
 
